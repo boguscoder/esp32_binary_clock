@@ -16,19 +16,12 @@ use esp_radio::wifi::{
     WifiController,
 };
 use reqwless::{client::HttpClient, request::Method};
-use serde::Deserialize;
 use sntpc::{get_time, NtpContext};
 use sntpc_net_embassy::UdpSocketWrapper;
 use sntpc_time_embassy::EmbassyTimestampGenerator;
 use static_cell::StaticCell;
 
 pub static CURRENT_TIME: Channel<CriticalSectionRawMutex, crate::Time, 1> = Channel::new();
-
-#[derive(Deserialize)]
-struct TimezoneResponse {
-    // ip-api.com returns 'offset' in seconds from UTC
-    offset: i32,
-}
 
 pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
     println!("Configuring esp-radio and network stack...");
@@ -127,7 +120,16 @@ async fn sntp_sync_task(stack: Stack<'static>) {
         .unwrap();
     let server_endpoint = SocketAddr::new(endpoints[0].into(), 123);
 
-    let tz_offset = fetch_timezone_offset(stack).await;
+    let tz_offset = match fetch_timezone_offset(stack).await {
+        Some(offset) => {
+            println!("Fetched timezone offset: {} seconds", offset);
+            offset
+        }
+        None => {
+            println!("Failed to fetch timezone offset, defaulting to 0");
+            0
+        }
+    };
 
     loop {
         println!("Sending SNTP request to {:?}", server_endpoint);
@@ -151,7 +153,7 @@ async fn sntp_sync_task(stack: Stack<'static>) {
     }
 }
 
-async fn fetch_timezone_offset(stack: Stack<'_>) -> i32 {
+async fn fetch_timezone_offset(stack: Stack<'_>) -> Option<i32> {
     static TCP_CLIENT_STATE: StaticCell<TcpClientState<1, 2048, 2048>> = StaticCell::new();
     let tcp_state = TCP_CLIENT_STATE.init(TcpClientState::new());
 
@@ -161,20 +163,15 @@ async fn fetch_timezone_offset(stack: Stack<'_>) -> i32 {
     let mut client = HttpClient::new(&tcp_client, &dns_socket);
 
     let mut request = client
-        .request(Method::GET, "http://ip-api.com/json/?fields=offset")
+        .request(Method::GET, "http://ip-api.com/line/?fields=offset")
         .await
-        .unwrap();
+        .ok()?;
 
-    let response = request.send(&mut rx_buffer).await.unwrap();
-    let body = response.body().read_to_end().await.unwrap();
-
-    if let Ok((data, _)) = serde_json_core::from_slice::<TimezoneResponse>(body) {
-        println!("Got timezone offset: {}", data.offset);
-        return data.offset;
-    }
-
-    println!("Failed to fetch timezone offset.");
-    0
+    let response = request.send(&mut rx_buffer).await.ok()?;
+    let body = response.body().read_to_end().await.ok()?;
+    let body_str = str::from_utf8(body).ok()?;
+    // ip-api.com returns 'offset' in seconds from UTC
+    body_str.trim().parse::<i32>().ok()
 }
 
 fn get_current_time_epoch(utc_epoch: i64, tz_offset_seconds: i32) -> crate::Time {
