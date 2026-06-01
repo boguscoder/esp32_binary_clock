@@ -56,18 +56,3 @@ impl SetMode {
         }
     }
 }
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) enum DisplayType {
-    BcdOnly,
-    Full,
-}
-
-impl DisplayType {
-    pub fn next(self) -> Self {
-        match self {
-            DisplayType::BcdOnly => DisplayType::Full,
-            DisplayType::Full => DisplayType::BcdOnly,
-        }
-    }
-}

@@ -1,5 +1,5 @@
-use crate::display::{Display, LandscapeDisplay};
-use crate::time::{DisplayType, SetMode, Time};
+use crate::display::{Display, DisplayType, LandscapeDisplay};
+use crate::time::{SetMode, Time};
 use core::fmt::Write;
 use embedded_graphics::{
     mono_font::{

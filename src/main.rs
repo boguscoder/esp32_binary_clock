@@ -3,34 +3,83 @@
 
 mod display;
 mod time;
+mod time_sync;
 mod ui;
 
-use crate::display::{init_display, DisplayConfig};
-use crate::time::{DisplayType, SetMode, Time};
+use crate::display::{init_display, DisplayConfig, DisplayType};
+use crate::time::{SetMode, Time};
 use crate::ui::render_ui;
-use embedded_hal::delay::DelayNs;
+
+use embassy_executor::Spawner;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
 use esp_hal::{
     delay::Delay,
-    gpio::{Input, InputConfig, Pull},
-    time::Instant,
+    gpio::{AnyPin, Input, InputConfig, Pull},
+    timer::timg::TimerGroup,
 };
+use esp_println::print;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const BACKLIGHT_BRIGHTNESS: u8 = 10;
 
-#[esp_hal::main]
-fn main() -> ! {
+#[derive(Clone, Copy)]
+enum ButtonEvent {
+    ShortPress,
+    LongPress,
+}
+
+static BUTTON_EVENTS: Channel<CriticalSectionRawMutex, ButtonEvent, 1> = Channel::new();
+
+#[embassy_executor::task]
+async fn button_task(button_pin: AnyPin<'static>) {
+    let tick_interval_ms = 20;
+    let mut ticker = Ticker::every(Duration::from_millis(tick_interval_ms));
+
+    let button = Input::new(button_pin, InputConfig::default().with_pull(Pull::Up));
+
+    let mut button_pressed_duration_ms = 0u32;
+    let mut last_button_state = button.is_high();
+
+    loop {
+        let current_button_state = button.is_high();
+
+        if !current_button_state {
+            button_pressed_duration_ms += tick_interval_ms as u32;
+        } else {
+            if !last_button_state {
+                if button_pressed_duration_ms >= 1000 {
+                    BUTTON_EVENTS.send(ButtonEvent::LongPress).await;
+                } else if button_pressed_duration_ms >= 30 {
+                    BUTTON_EVENTS.send(ButtonEvent::ShortPress).await;
+                }
+                button_pressed_duration_ms = 0;
+            }
+        }
+        last_button_state = current_button_state;
+
+        ticker.next().await;
+    }
+}
+
+#[esp_rtos::main]
+async fn main(spawner: Spawner) -> ! {
+    esp_alloc::heap_allocator!(size: 96 * 1024);
+
     let config = esp_hal::Config::default();
     let peripherals = esp_hal::init(config);
+
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+    let sw_intr =
+        esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+    esp_rtos::start(timg0.timer0, sw_intr.software_interrupt0);
+
+    time_sync::setup_time_sync(peripherals.WIFI, spawner).await;
+    spawner.spawn(button_task(peripherals.GPIO9.into()).unwrap());
+
     let mut delay = Delay::new();
-
-    let button = Input::new(
-        peripherals.GPIO9,
-        InputConfig::default().with_pull(Pull::Up),
-    );
-
     let mut display = init_display(
         DisplayConfig {
             spi: peripherals.SPI2,
@@ -46,45 +95,37 @@ fn main() -> ! {
         &mut delay,
     );
 
-    let mut time = Time::new(12, 0, 0);
+    let mut time = time_sync::CURRENT_TIME.receive().await;
+    print!("Initial time received: {:?}", time);
     let mut set_mode = SetMode::None;
-    let mut displayType = DisplayType::BcdOnly;
+    let mut display_type = DisplayType::BcdOnly;
 
-    let mut last_update_time = Instant::now();
-    let mut button_pressed_duration_ms = 0u32;
-    let mut last_button_state = button.is_high();
-
+    let tick_interval_ms = 20;
+    let mut loop_ticker = Ticker::every(Duration::from_millis(tick_interval_ms));
     let mut force_redraw = true;
     let mut last_second = 99u8;
     let mut last_flash_state = false;
     let mut last_set_mode = set_mode;
-    let mut last_type = displayType;
+    let mut last_type = display_type;
 
     loop {
-        let now = Instant::now();
-        let elapsed_ms = (now - last_update_time).as_millis();
-        last_update_time = now;
+        time = time_sync::CURRENT_TIME.try_receive().unwrap_or(time);
 
-        time.tick(elapsed_ms);
+        time.tick(tick_interval_ms);
 
-        // Button debouncer
-        let current_button_state = button.is_high();
-        if !current_button_state {
-            button_pressed_duration_ms += elapsed_ms as u32;
-        } else {
-            if !last_button_state {
-                if button_pressed_duration_ms >= 1000 {
-                    // Long press
+        while let Ok(event) = BUTTON_EVENTS.try_receive() {
+            match event {
+                ButtonEvent::LongPress => {
                     set_mode = set_mode.next();
                     if set_mode != SetMode::None {
-                        displayType = DisplayType::Full;
+                        display_type = DisplayType::Full;
                     }
                     force_redraw = true;
-                } else if button_pressed_duration_ms >= 30 {
-                    // Short press
+                }
+                ButtonEvent::ShortPress => {
                     match set_mode {
                         SetMode::None => {
-                            displayType = displayType.next();
+                            display_type = display_type.next();
                         }
                         SetMode::SetHours => {
                             time.increment_hour();
@@ -95,32 +136,30 @@ fn main() -> ! {
                     }
                     force_redraw = true;
                 }
-                button_pressed_duration_ms = 0;
             }
         }
-        last_button_state = current_button_state;
 
         let current_flash_state = (time.milliseconds / 250).is_multiple_of(2);
 
         let needs_redraw = force_redraw
             || time.seconds != last_second
             || set_mode != last_set_mode
-            || displayType != last_type
+            || display_type != last_type
             || (set_mode != SetMode::None && current_flash_state != last_flash_state);
 
         if needs_redraw {
             let clear_screen =
-                force_redraw || set_mode != last_set_mode || displayType != last_type;
+                force_redraw || set_mode != last_set_mode || display_type != last_type;
 
-            render_ui(&mut display, &time, set_mode, displayType, clear_screen);
+            render_ui(&mut display, &time, set_mode, display_type, clear_screen);
 
             last_second = time.seconds;
             last_flash_state = current_flash_state;
             last_set_mode = set_mode;
-            last_type = displayType;
+            last_type = display_type;
             force_redraw = false;
         }
 
-        delay.delay_ms(20u32);
+        loop_ticker.next().await;
     }
 }
