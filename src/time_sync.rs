@@ -30,7 +30,7 @@ struct TimezoneResponse {
     offset: i32,
 }
 
-pub async fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
+pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
     println!("Configuring esp-radio and network stack...");
 
     let station_config = StationConfig::default()
@@ -179,9 +179,11 @@ async fn fetch_timezone_offset(stack: Stack<'_>) -> i32 {
 
 fn get_current_time_epoch(utc_epoch: i64, tz_offset_seconds: i32) -> crate::Time {
     let day_seconds = ((utc_epoch + tz_offset_seconds as i64) % 86400 + 86400) % 86400;
-    Time::new(
+    let time = Time::new(
         (day_seconds / 3600) as u8,
         ((day_seconds % 3600) / 60) as u8,
         (day_seconds % 60) as u8,
-    )
+    );
+    println!("Parsed time from SNTP: {:?}", time);
+    time
 }

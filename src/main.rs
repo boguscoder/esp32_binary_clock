@@ -19,7 +19,6 @@ use esp_hal::{
     gpio::{AnyPin, Input, InputConfig, Pull},
     timer::timg::TimerGroup,
 };
-use esp_println::print;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -76,7 +75,7 @@ async fn main(spawner: Spawner) -> ! {
         esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_intr.software_interrupt0);
 
-    time_sync::setup_time_sync(peripherals.WIFI, spawner).await;
+    time_sync::setup_time_sync(peripherals.WIFI, spawner);
     spawner.spawn(button_task(peripherals.GPIO9.into()).unwrap());
 
     let mut delay = Delay::new();
@@ -95,8 +94,9 @@ async fn main(spawner: Spawner) -> ! {
         &mut delay,
     );
 
-    let mut time = time_sync::CURRENT_TIME.receive().await;
-    print!("Initial time received: {:?}", time);
+    let mut time = time_sync::CURRENT_TIME
+        .try_receive()
+        .unwrap_or(Time::new(12, 0, 0));
     let mut set_mode = SetMode::None;
     let mut display_type = DisplayType::BcdOnly;
 
