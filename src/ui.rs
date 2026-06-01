@@ -1,6 +1,8 @@
-use crate::display::{Display, DisplayType, LandscapeDisplay};
+use crate::display::{Display, LandscapeDisplay};
 use crate::time::{SetMode, Time};
 use core::fmt::Write;
+use core::net::Ipv4Addr;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embedded_graphics::{
     mono_font::{
         ascii::{FONT_6X10, FONT_9X15_BOLD},
@@ -21,6 +23,61 @@ const M_INNER: Rgb565 = Rgb565::new(0, 60, 30);
 const M_OUTER: Rgb565 = Rgb565::new(0, 30, 15);
 const S_INNER: Rgb565 = Rgb565::new(31, 45, 0);
 const S_OUTER: Rgb565 = Rgb565::new(20, 20, 0);
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum UiType {
+    BcdTime,
+    FullTime,
+    Info,
+}
+
+impl UiType {
+    pub fn next(self) -> Self {
+        match self {
+            UiType::BcdTime => UiType::FullTime,
+            UiType::FullTime => UiType::Info,
+            UiType::Info => UiType::BcdTime,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Info {
+    ssid: &'static str,
+    connected: bool,
+    ip_address: Ipv4Addr,
+    timezone_offset: i32,
+    dirty: bool,
+}
+
+impl Info {
+    const fn new() -> Self {
+        Self {
+            ssid: env!("WIFI_SSID"),
+            connected: false,
+            ip_address: Ipv4Addr::UNSPECIFIED,
+            timezone_offset: 0,
+            dirty: true,
+        }
+    }
+
+    pub fn set_connected(&mut self, connected: bool) {
+        self.connected = connected;
+        self.dirty = true;
+    }
+
+    pub fn set_ip_address(&mut self, ip: Ipv4Addr) {
+        self.ip_address = ip;
+        self.dirty = true;
+    }
+
+    pub fn set_timezone_offset(&mut self, offset: i32) {
+        self.timezone_offset = offset;
+        self.dirty = true;
+    }
+}
+
+pub static CURRENT_INFO: Mutex<CriticalSectionRawMutex, Info> = Mutex::new(Info::new());
 
 // Draws a premium glowing dot (orb) on the display
 fn draw_glowing_dot<D>(
@@ -79,19 +136,14 @@ where
     Ok(())
 }
 
-pub(crate) fn render_ui(
-    raw_display: &mut Display<'_>,
+fn render_clock(
+    display: &mut LandscapeDisplay,
     time: &Time,
     set_mode: SetMode,
-    display_type: DisplayType,
+    ui_type: UiType,
     force_redraw: bool,
 ) {
-    let mut display_target = LandscapeDisplay { base: raw_display };
-    let display = &mut display_target;
-
     if force_redraw {
-        display.clear(BG_COLOR).unwrap();
-
         let label_style = MonoTextStyleBuilder::new()
             .font(&FONT_6X10)
             .text_color(TEXT_MUTED)
@@ -122,11 +174,7 @@ pub(crate) fn render_ui(
 
     let x_positions = [45, 90, 140, 185, 235, 280];
     let y_positions = [35, 60, 85, 110];
-    let y_shift = if display_type == DisplayType::Full {
-        0
-    } else {
-        10
-    };
+    let y_shift = if ui_type == UiType::FullTime { 0 } else { 10 };
 
     for (col_idx, &(val, max_bits, inner_col, outer_col, mode)) in cols.iter().enumerate() {
         let display_column = set_mode != mode || is_flash_on;
@@ -147,7 +195,7 @@ pub(crate) fn render_ui(
         }
     }
 
-    if display_type == DisplayType::Full {
+    if ui_type == UiType::FullTime {
         let mut time_str = heapless::String::<12>::new();
 
         let show_hours = set_mode != SetMode::SetHours || is_flash_on;
@@ -185,5 +233,59 @@ pub(crate) fn render_ui(
         )
         .draw(display)
         .unwrap();
+    }
+}
+
+async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
+    let mut time_str = heapless::String::<128>::new();
+
+    {
+        let mut info = CURRENT_INFO.lock().await;
+        let _ = write!(
+            &mut time_str,
+            "SSID: {}\nConnected: {}\nIP: {:?}\nOffset: {}s",
+            info.ssid, info.connected, info.ip_address, info.timezone_offset
+        );
+
+        if info.dirty {
+            display.clear(BG_COLOR).unwrap();
+            info.dirty = false;
+        }
+    }
+
+    let text_style = MonoTextStyleBuilder::new()
+        .font(&FONT_9X15_BOLD)
+        .text_color(Rgb565::new(31, 63, 31))
+        .background_color(BG_COLOR)
+        .build();
+
+    Text::with_alignment(
+        time_str.as_str(),
+        Point::new(10, 30),
+        text_style,
+        Alignment::Left,
+    )
+    .draw(display)
+    .unwrap();
+}
+
+pub async fn render_ui(
+    raw_display: &mut Display<'_>,
+    time: &Time,
+    set_mode: SetMode,
+    ui_type: UiType,
+    force_redraw: bool,
+) {
+    let mut display_target = LandscapeDisplay { base: raw_display };
+
+    if force_redraw {
+        display_target.base.clear(BG_COLOR).unwrap();
+    }
+    match ui_type {
+        UiType::BcdTime | UiType::FullTime => {
+            render_clock(&mut display_target, time, set_mode, ui_type, force_redraw)
+        }
+
+        UiType::Info => render_info(&mut display_target).await,
     }
 }

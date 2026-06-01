@@ -1,5 +1,5 @@
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Time {
+pub struct Time {
     pub hours: u8,
     pub minutes: u8,
     pub seconds: u8,
@@ -41,7 +41,7 @@ impl Time {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) enum SetMode {
+pub enum SetMode {
     None,
     SetHours,
     SetMinutes,

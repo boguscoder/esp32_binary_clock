@@ -6,12 +6,12 @@ mod time;
 mod time_sync;
 mod ui;
 
-use crate::display::{init_display, DisplayConfig, DisplayType};
+use crate::display::{init_display, DisplayConfig};
 use crate::time::{SetMode, Time};
-use crate::ui::render_ui;
+use crate::ui::{render_ui, UiType};
 
 use embassy_executor::Spawner;
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
 use esp_hal::{
@@ -30,12 +30,12 @@ enum ButtonEvent {
     LongPress,
 }
 
-static BUTTON_EVENTS: Channel<CriticalSectionRawMutex, ButtonEvent, 1> = Channel::new();
+static BUTTON_EVENTS: Signal<CriticalSectionRawMutex, ButtonEvent> = Signal::new();
 
 #[embassy_executor::task]
 async fn button_task(button_pin: AnyPin<'static>) {
-    let tick_interval_ms = 20;
-    let mut ticker = Ticker::every(Duration::from_millis(tick_interval_ms));
+    const TICK_INTERVAL_MS: u64 = 20;
+    let mut ticker = Ticker::every(Duration::from_millis(TICK_INTERVAL_MS));
 
     let button = Input::new(button_pin, InputConfig::default().with_pull(Pull::Up));
 
@@ -46,13 +46,13 @@ async fn button_task(button_pin: AnyPin<'static>) {
         let current_button_state = button.is_high();
 
         if !current_button_state {
-            button_pressed_duration_ms += tick_interval_ms as u32;
+            button_pressed_duration_ms += TICK_INTERVAL_MS as u32;
         } else {
             if !last_button_state {
                 if button_pressed_duration_ms >= 1000 {
-                    BUTTON_EVENTS.send(ButtonEvent::LongPress).await;
+                    BUTTON_EVENTS.signal(ButtonEvent::LongPress);
                 } else if button_pressed_duration_ms >= 30 {
-                    BUTTON_EVENTS.send(ButtonEvent::ShortPress).await;
+                    BUTTON_EVENTS.signal(ButtonEvent::ShortPress);
                 }
                 button_pressed_duration_ms = 0;
             }
@@ -95,10 +95,10 @@ async fn main(spawner: Spawner) -> ! {
     );
 
     let mut time = time_sync::CURRENT_TIME
-        .try_receive()
+        .try_take()
         .unwrap_or(Time::new(12, 0, 0));
     let mut set_mode = SetMode::None;
-    let mut display_type = DisplayType::BcdOnly;
+    let mut display_type = UiType::BcdTime;
 
     let tick_interval_ms = 20;
     let mut loop_ticker = Ticker::every(Duration::from_millis(tick_interval_ms));
@@ -109,16 +109,16 @@ async fn main(spawner: Spawner) -> ! {
     let mut last_type = display_type;
 
     loop {
-        time = time_sync::CURRENT_TIME.try_receive().unwrap_or(time);
+        time = time_sync::CURRENT_TIME.try_take().unwrap_or(time);
 
         time.tick(tick_interval_ms);
 
-        while let Ok(event) = BUTTON_EVENTS.try_receive() {
+        while let Some(event) = BUTTON_EVENTS.try_take() {
             match event {
                 ButtonEvent::LongPress => {
                     set_mode = set_mode.next();
                     if set_mode != SetMode::None {
-                        display_type = DisplayType::Full;
+                        display_type = UiType::FullTime;
                     }
                     force_redraw = true;
                 }
@@ -151,7 +151,7 @@ async fn main(spawner: Spawner) -> ! {
             let clear_screen =
                 force_redraw || set_mode != last_set_mode || display_type != last_type;
 
-            render_ui(&mut display, &time, set_mode, display_type, clear_screen);
+            render_ui(&mut display, &time, set_mode, display_type, clear_screen).await;
 
             last_second = time.seconds;
             last_flash_state = current_flash_state;

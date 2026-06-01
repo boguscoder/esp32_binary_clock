@@ -22,13 +22,13 @@ use mipidsi::{
 };
 use static_cell::StaticCell;
 
-pub(crate) type Display<'d> = mipidsi::Display<
+pub type Display<'d> = mipidsi::Display<
     SpiInterface<'d, ExclusiveDevice<Spi<'d, esp_hal::Blocking>, Output<'d>, Delay>, Output<'d>>,
     ST7789,
     Output<'d>,
 >;
 
-pub(crate) struct LandscapeDisplay<'a, 'd> {
+pub struct LandscapeDisplay<'a, 'd> {
     pub base: &'a mut Display<'d>,
 }
 
@@ -59,7 +59,7 @@ impl<'a, 'd> OriginDimensions for LandscapeDisplay<'a, 'd> {
     }
 }
 
-pub(crate) struct DisplayConfig<'d> {
+pub struct DisplayConfig<'d> {
     pub spi: esp_hal::peripherals::SPI2<'d>,
     pub mosi: AnyPin<'d>,
     pub sclk: AnyPin<'d>,
@@ -71,7 +71,7 @@ pub(crate) struct DisplayConfig<'d> {
     pub backlight_duty: u8,
 }
 
-pub(crate) fn init_display<'d>(config: DisplayConfig<'d>, delay: &mut Delay) -> Display<'d> {
+pub fn init_display<'d>(config: DisplayConfig<'d>, delay: &mut Delay) -> Display<'d> {
     let mut ledc = Ledc::new(config.ledc);
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
 
@@ -127,19 +127,4 @@ pub(crate) fn init_display<'d>(config: DisplayConfig<'d>, delay: &mut Delay) -> 
     display.clear(Rgb565::BLACK).unwrap();
 
     display
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) enum DisplayType {
-    BcdOnly,
-    Full,
-}
-
-impl DisplayType {
-    pub fn next(self) -> Self {
-        match self {
-            DisplayType::BcdOnly => DisplayType::Full,
-            DisplayType::Full => DisplayType::BcdOnly,
-        }
-    }
 }

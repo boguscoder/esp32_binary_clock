@@ -1,3 +1,4 @@
+use crate::ui::CURRENT_INFO;
 use crate::Time;
 use core::net::SocketAddr;
 use embassy_executor::Spawner;
@@ -7,7 +8,7 @@ use embassy_net::{
     udp::{PacketMetadata, UdpSocket},
     Config as NetConfig, IpListenEndpoint, Runner, Stack, StackResources,
 };
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
 use esp_hal::{peripherals::WIFI, rng::Rng};
 use esp_println::println;
@@ -21,7 +22,7 @@ use sntpc_net_embassy::UdpSocketWrapper;
 use sntpc_time_embassy::EmbassyTimestampGenerator;
 use static_cell::StaticCell;
 
-pub static CURRENT_TIME: Channel<CriticalSectionRawMutex, crate::Time, 1> = Channel::new();
+pub static CURRENT_TIME: Signal<CriticalSectionRawMutex, crate::Time> = Signal::new();
 
 pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
     println!("Configuring esp-radio and network stack...");
@@ -62,6 +63,7 @@ async fn connection_task(mut controller: WifiController<'static>) {
         match controller.connect_async().await {
             Ok(_) => {
                 println!("Wi-Fi Connected successfully!");
+                CURRENT_INFO.lock().await.set_connected(true);
                 let _ = controller.wait_for_disconnect_async().await;
                 println!("Wi-Fi disconnected! Attempting to reconnect...");
             }
@@ -85,6 +87,10 @@ async fn sntp_sync_task(stack: Stack<'static>) {
         if stack.is_config_up() {
             if let Some(config) = stack.config_v4() {
                 println!("Assigned IP: {}", config.address);
+                CURRENT_INFO
+                    .lock()
+                    .await
+                    .set_ip_address(config.address.address());
                 break;
             }
         }
@@ -123,6 +129,8 @@ async fn sntp_sync_task(stack: Stack<'static>) {
     let tz_offset = match fetch_timezone_offset(stack).await {
         Some(offset) => {
             println!("Fetched timezone offset: {} seconds", offset);
+            CURRENT_INFO.lock().await.set_timezone_offset(offset);
+
             offset
         }
         None => {
@@ -138,9 +146,7 @@ async fn sntp_sync_task(stack: Stack<'static>) {
             Ok(ntp_result) => {
                 let ntp_seconds = ntp_result.sec() as i64;
 
-                CURRENT_TIME
-                    .send(get_current_time_epoch(ntp_seconds, tz_offset))
-                    .await;
+                CURRENT_TIME.signal(get_current_time_epoch(ntp_seconds, tz_offset));
 
                 println!("Time Sync OK! Epoch: {}", ntp_seconds);
                 Timer::after(Duration::from_secs(3600)).await;
