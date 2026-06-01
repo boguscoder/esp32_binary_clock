@@ -155,7 +155,7 @@ async fn fetch_timezone_offset(stack: Stack<'_>) -> i32 {
     static TCP_CLIENT_STATE: StaticCell<TcpClientState<1, 2048, 2048>> = StaticCell::new();
     let tcp_state = TCP_CLIENT_STATE.init(TcpClientState::new());
 
-    let tcp_client = TcpClient::new(stack, &tcp_state);
+    let tcp_client = TcpClient::new(stack, tcp_state);
     let dns_socket = DnsSocket::new(stack);
     let mut rx_buffer = [0u8; 2048];
     let mut client = HttpClient::new(&tcp_client, &dns_socket);
