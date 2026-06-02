@@ -41,13 +41,13 @@ impl UiType {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Info {
     ssid: &'static str,
     connected: bool,
     ip_address: Ipv4Addr,
     timezone_offset: i32,
-    dirty: bool,
+    timezone_name: heapless::String<32>,
 }
 
 impl Info {
@@ -57,23 +57,21 @@ impl Info {
             connected: false,
             ip_address: Ipv4Addr::UNSPECIFIED,
             timezone_offset: 0,
-            dirty: true,
+            timezone_name: heapless::String::new(),
         }
     }
 
     pub fn set_connected(&mut self, connected: bool) {
         self.connected = connected;
-        self.dirty = true;
     }
 
     pub fn set_ip_address(&mut self, ip: Ipv4Addr) {
         self.ip_address = ip;
-        self.dirty = true;
     }
 
-    pub fn set_timezone_offset(&mut self, offset: i32) {
+    pub fn set_timezone(&mut self, offset: i32, name: heapless::String<32>) {
         self.timezone_offset = offset;
-        self.dirty = true;
+        self.timezone_name = name;
     }
 }
 
@@ -240,17 +238,12 @@ async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
     let mut time_str = heapless::String::<128>::new();
 
     {
-        let mut info = CURRENT_INFO.lock().await;
+        let info = CURRENT_INFO.lock().await;
         let _ = write!(
             &mut time_str,
-            "SSID: {}\nConnected: {}\nIP: {:?}\nOffset: {}s",
-            info.ssid, info.connected, info.ip_address, info.timezone_offset
+            "SSID: {}\nConnected: {}\nIP: {:?}\nOffset: {}s\nTZ: {}",
+            info.ssid, info.connected, info.ip_address, info.timezone_offset, info.timezone_name
         );
-
-        if info.dirty {
-            display.clear(BG_COLOR).unwrap();
-            info.dirty = false;
-        }
     }
 
     let text_style = MonoTextStyleBuilder::new()

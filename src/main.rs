@@ -8,7 +8,7 @@ mod ui;
 
 use crate::display::{init_display, DisplayConfig};
 use crate::time::{SetMode, Time};
-use crate::ui::{render_ui, UiType};
+use crate::ui::{render_ui, UiType, CURRENT_INFO};
 
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
@@ -100,18 +100,19 @@ async fn main(spawner: Spawner) -> ! {
     let mut set_mode = SetMode::None;
     let mut display_type = UiType::BcdTime;
 
-    let tick_interval_ms = 20;
-    let mut loop_ticker = Ticker::every(Duration::from_millis(tick_interval_ms));
+    const TICK_INTERVAL_MS: u64 = 20;
+    let mut loop_ticker = Ticker::every(Duration::from_millis(TICK_INTERVAL_MS));
     let mut force_redraw = true;
     let mut last_second = 99u8;
     let mut last_flash_state = false;
     let mut last_set_mode = set_mode;
     let mut last_type = display_type;
+    let mut last_info = CURRENT_INFO.lock().await.clone();
 
     loop {
         time = time_sync::CURRENT_TIME.try_take().unwrap_or(time);
 
-        time.tick(tick_interval_ms);
+        time.tick(TICK_INTERVAL_MS);
 
         while let Some(event) = BUTTON_EVENTS.try_take() {
             match event {
@@ -148,8 +149,10 @@ async fn main(spawner: Spawner) -> ! {
             || (set_mode != SetMode::None && current_flash_state != last_flash_state);
 
         if needs_redraw {
-            let clear_screen =
-                force_redraw || set_mode != last_set_mode || display_type != last_type;
+            let clear_screen = force_redraw
+                || set_mode != last_set_mode
+                || display_type != last_type
+                || CURRENT_INFO.lock().await.ne(&last_info);
 
             render_ui(&mut display, &time, set_mode, display_type, clear_screen).await;
 
@@ -158,6 +161,7 @@ async fn main(spawner: Spawner) -> ! {
             last_set_mode = set_mode;
             last_type = display_type;
             force_redraw = false;
+            last_info = CURRENT_INFO.lock().await.clone();
         }
 
         loop_ticker.next().await;

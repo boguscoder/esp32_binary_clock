@@ -127,9 +127,12 @@ async fn sntp_sync_task(stack: Stack<'static>) {
     let server_endpoint = SocketAddr::new(endpoints[0].into(), 123);
 
     let tz_offset = match fetch_timezone_offset(stack).await {
-        Some(offset) => {
-            println!("Fetched timezone offset: {} seconds", offset);
-            CURRENT_INFO.lock().await.set_timezone_offset(offset);
+        Some((offset, tz_name)) => {
+            println!(
+                "Fetched timezone offset: {} seconds, tz name: {}",
+                offset, tz_name
+            );
+            CURRENT_INFO.lock().await.set_timezone(offset, tz_name);
 
             offset
         }
@@ -145,10 +148,7 @@ async fn sntp_sync_task(stack: Stack<'static>) {
         match get_time(server_endpoint, &socket_wrapper, ntp_context).await {
             Ok(ntp_result) => {
                 let ntp_seconds = ntp_result.sec() as i64;
-
                 CURRENT_TIME.signal(get_current_time_epoch(ntp_seconds, tz_offset));
-
-                println!("Time Sync OK! Epoch: {}", ntp_seconds);
                 Timer::after(Duration::from_secs(3600)).await;
             }
             Err(_e) => {
@@ -159,7 +159,7 @@ async fn sntp_sync_task(stack: Stack<'static>) {
     }
 }
 
-async fn fetch_timezone_offset(stack: Stack<'_>) -> Option<i32> {
+async fn fetch_timezone_offset(stack: Stack<'_>) -> Option<(i32, heapless::String<32>)> {
     static TCP_CLIENT_STATE: StaticCell<TcpClientState<1, 2048, 2048>> = StaticCell::new();
     let tcp_state = TCP_CLIENT_STATE.init(TcpClientState::new());
 
@@ -169,15 +169,23 @@ async fn fetch_timezone_offset(stack: Stack<'_>) -> Option<i32> {
     let mut client = HttpClient::new(&tcp_client, &dns_socket);
 
     let mut request = client
-        .request(Method::GET, "http://ip-api.com/line/?fields=offset")
+        .request(
+            Method::GET,
+            "http://ip-api.com/line/?fields=offset,timezone",
+        )
         .await
         .ok()?;
 
     let response = request.send(&mut rx_buffer).await.ok()?;
     let body = response.body().read_to_end().await.ok()?;
     let body_str = str::from_utf8(body).ok()?;
-    // ip-api.com returns 'offset' in seconds from UTC
-    body_str.trim().parse::<i32>().ok()
+    let mut parts = body_str.lines();
+    let mut tz_name = heapless::String::<32>::new();
+    if tz_name.push_str(parts.next()?).is_err() {
+        return None;
+    }
+    let offset = parts.next()?.trim().parse::<i32>().ok()?;
+    Some((offset, tz_name))
 }
 
 fn get_current_time_epoch(utc_epoch: i64, tz_offset_seconds: i32) -> crate::Time {
