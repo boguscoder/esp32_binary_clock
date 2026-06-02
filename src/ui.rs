@@ -1,5 +1,6 @@
 use crate::display::{Display, LandscapeDisplay};
 use crate::time::{SetMode, Time};
+use crate::time_sync::ConnectionState;
 use core::fmt::Write;
 use core::net::Ipv4Addr;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
@@ -44,7 +45,7 @@ impl UiType {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Info {
     ssid: &'static str,
-    connected: bool,
+    state: ConnectionState,
     ip_address: Ipv4Addr,
     timezone_offset: i32,
     timezone_name: heapless::String<32>,
@@ -54,15 +55,15 @@ impl Info {
     const fn new() -> Self {
         Self {
             ssid: env!("WIFI_SSID"),
-            connected: false,
+            state: ConnectionState::Disconnected,
             ip_address: Ipv4Addr::UNSPECIFIED,
             timezone_offset: 0,
             timezone_name: heapless::String::new(),
         }
     }
 
-    pub fn set_connected(&mut self, connected: bool) {
-        self.connected = connected;
+    pub fn set_state(&mut self, state: ConnectionState) {
+        self.state = state;
     }
 
     pub fn set_ip_address(&mut self, ip: Ipv4Addr) {
@@ -241,8 +242,8 @@ async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
         let info = CURRENT_INFO.lock().await;
         let _ = write!(
             &mut time_str,
-            "SSID: {}\nConnected: {}\nIP: {:?}\nOffset: {}s\nTZ: {}",
-            info.ssid, info.connected, info.ip_address, info.timezone_offset, info.timezone_name
+            "SSID: {}\nState: {:?}\nIP: {:?}\nOffset: {}s\nTZ: {}",
+            info.ssid, info.state, info.ip_address, info.timezone_offset, info.timezone_name
         );
     }
 

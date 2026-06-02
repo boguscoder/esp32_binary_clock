@@ -24,6 +24,13 @@ use static_cell::StaticCell;
 
 pub static CURRENT_TIME: Signal<CriticalSectionRawMutex, crate::Time> = Signal::new();
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ConnectionState {
+    Disconnected,
+    Connecting,
+    Connected,
+}
+
 pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
     println!("Configuring esp-radio and network stack...");
 
@@ -58,21 +65,41 @@ pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
 #[embassy_executor::task]
 async fn connection_task(mut controller: WifiController<'static>) {
     println!("Starting Wi-Fi connection task...");
-
+    const MAX_RETRIES: usize = 10;
+    let mut retries = 0;
     loop {
+        {
+            CURRENT_INFO
+                .lock()
+                .await
+                .set_state(ConnectionState::Connecting);
+        }
         match controller.connect_async().await {
             Ok(_) => {
                 println!("Wi-Fi Connected successfully!");
-                CURRENT_INFO.lock().await.set_connected(true);
+                CURRENT_INFO
+                    .lock()
+                    .await
+                    .set_state(ConnectionState::Connected);
                 let _ = controller.wait_for_disconnect_async().await;
                 println!("Wi-Fi disconnected! Attempting to reconnect...");
             }
             Err(e) => {
                 println!("Connection failed. {} Retrying in 5 seconds...", e);
                 Timer::after(Duration::from_millis(5000)).await;
+                retries += 1;
+                if retries >= MAX_RETRIES {
+                    println!("Max retries reached. Giving up on Wi-Fi connection.");
+                    break;
+                }
             }
         }
     }
+
+    CURRENT_INFO
+        .lock()
+        .await
+        .set_state(ConnectionState::Disconnected);
 }
 
 #[embassy_executor::task]

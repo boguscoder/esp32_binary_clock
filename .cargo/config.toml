@@ -9,3 +9,5 @@ target = "riscv32imac-unknown-none-elf"
 
 [env]
 MCU = "esp32c6"
+WIFI_SSID = "foo"
+WIFI_PASS = "bar"
