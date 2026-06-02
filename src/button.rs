@@ -10,14 +10,13 @@ pub enum ButtonEvent {
 }
 
 pub static BUTTON_EVENTS: Signal<CriticalSectionRawMutex, ButtonEvent> = Signal::new();
-const TICK_INTERVAL_MS: u64 = 20;
 const DEBOUNCE_MS: u64 = 30;
 const LONG_PRESS_MS: u64 = 1000;
 
 #[embassy_executor::task]
 pub async fn button_task(button_pin: AnyPin<'static>) {
     let button = Input::new(button_pin, InputConfig::default().with_pull(Pull::Up));
-    let mut ticker = Ticker::every(Duration::from_millis(TICK_INTERVAL_MS));
+    let mut ticker = Ticker::every(Duration::from_millis(crate::TICK_INTERVAL_MS));
     let mut press_start: Option<Instant> = None;
 
     loop {

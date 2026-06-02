@@ -20,7 +20,7 @@ use esp_hal::{delay::Delay, timer::timg::TimerGroup};
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const BACKLIGHT_BRIGHTNESS: u8 = 5;
-const TICK_INTERVAL_MS: u64 = 20;
+pub const TICK_INTERVAL_MS: u64 = 20;
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
