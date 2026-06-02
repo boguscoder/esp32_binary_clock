@@ -1,5 +1,5 @@
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
-use embassy_time::{Duration, Ticker};
+use embassy_time::{Duration, Instant, Ticker};
 use esp_backtrace as _;
 use esp_hal::gpio::{AnyPin, Input, InputConfig, Pull};
 
@@ -10,33 +10,37 @@ pub enum ButtonEvent {
 }
 
 pub static BUTTON_EVENTS: Signal<CriticalSectionRawMutex, ButtonEvent> = Signal::new();
+const TICK_INTERVAL_MS: u64 = 20;
+const DEBOUNCE_MS: u64 = 30;
+const LONG_PRESS_MS: u64 = 1000;
 
 #[embassy_executor::task]
 pub async fn button_task(button_pin: AnyPin<'static>) {
-    const TICK_INTERVAL_MS: u64 = 20;
-    let mut ticker = Ticker::every(Duration::from_millis(TICK_INTERVAL_MS));
-
     let button = Input::new(button_pin, InputConfig::default().with_pull(Pull::Up));
-
-    let mut button_pressed_duration_ms = 0u32;
-    let mut last_button_state = button.is_high();
+    let mut ticker = Ticker::every(Duration::from_millis(TICK_INTERVAL_MS));
+    let mut press_start: Option<Instant> = None;
 
     loop {
-        let current_button_state = button.is_high();
+        let is_pressed = button.is_low();
 
-        if !current_button_state {
-            button_pressed_duration_ms += TICK_INTERVAL_MS as u32;
-        } else {
-            if !last_button_state {
-                if button_pressed_duration_ms >= 1000 {
+        match (is_pressed, press_start) {
+            // Button just pressed
+            (true, None) => {
+                press_start = Some(Instant::now());
+            }
+            // Button released after being pressed
+            (false, Some(start)) => {
+                let duration = start.elapsed().as_millis();
+                if duration >= LONG_PRESS_MS {
                     BUTTON_EVENTS.signal(ButtonEvent::LongPress);
-                } else if button_pressed_duration_ms >= 30 {
+                } else if duration >= DEBOUNCE_MS {
                     BUTTON_EVENTS.signal(ButtonEvent::ShortPress);
                 }
-                button_pressed_duration_ms = 0;
+                press_start = None;
             }
+            // Still pressed or still released
+            _ => {}
         }
-        last_button_state = current_button_state;
 
         ticker.next().await;
     }
