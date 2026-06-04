@@ -23,6 +23,7 @@ use sntpc_time_embassy::EmbassyTimestampGenerator;
 use static_cell::StaticCell;
 
 pub static CURRENT_TIME: Signal<CriticalSectionRawMutex, crate::Time> = Signal::new();
+const TIME_REFRESH_INTERVAL: Duration = Duration::from_secs(3600 * 3);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConnectionState {
@@ -175,8 +176,10 @@ async fn sntp_sync_task(stack: Stack<'static>) {
         match get_time(server_endpoint, &socket_wrapper, ntp_context).await {
             Ok(ntp_result) => {
                 let ntp_seconds = ntp_result.sec() as i64;
-                CURRENT_TIME.signal(get_current_time_epoch(ntp_seconds, tz_offset));
-                Timer::after(Duration::from_secs(3600)).await;
+                let new_time = get_current_time_epoch(ntp_seconds, tz_offset);
+                CURRENT_TIME.signal(new_time);
+                CURRENT_INFO.lock().await.set_sync_time(new_time);
+                Timer::after(TIME_REFRESH_INTERVAL).await;
             }
             Err(_e) => {
                 println!("SNTP Sync Failed, retrying in 10s...");
@@ -222,6 +225,6 @@ fn get_current_time_epoch(utc_epoch: i64, tz_offset_seconds: i32) -> crate::Time
         ((day_seconds % 3600) / 60) as u8,
         (day_seconds % 60) as u8,
     );
-    println!("Parsed time from SNTP: {:?}", time);
+    println!("Parsed time from SNTP: {}", time);
     time
 }

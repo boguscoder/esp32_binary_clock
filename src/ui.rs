@@ -42,42 +42,6 @@ impl UiType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Info {
-    ssid: &'static str,
-    state: ConnectionState,
-    ip_address: Ipv4Addr,
-    timezone_offset: i32,
-    timezone_name: heapless::String<32>,
-}
-
-impl Info {
-    const fn new() -> Self {
-        Self {
-            ssid: env!("WIFI_SSID"),
-            state: ConnectionState::Disconnected,
-            ip_address: Ipv4Addr::UNSPECIFIED,
-            timezone_offset: 0,
-            timezone_name: heapless::String::new(),
-        }
-    }
-
-    pub fn set_state(&mut self, state: ConnectionState) {
-        self.state = state;
-    }
-
-    pub fn set_ip_address(&mut self, ip: Ipv4Addr) {
-        self.ip_address = ip;
-    }
-
-    pub fn set_timezone(&mut self, offset: i32, name: heapless::String<32>) {
-        self.timezone_offset = offset;
-        self.timezone_name = name;
-    }
-}
-
-pub static CURRENT_INFO: Mutex<CriticalSectionRawMutex, Info> = Mutex::new(Info::new());
-
 // Draws a premium glowing dot (orb) on the display
 fn draw_glowing_dot<D>(
     target: &mut D,
@@ -235,6 +199,59 @@ fn render_clock(
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Info {
+    ssid: &'static str,
+    state: ConnectionState,
+    ip_address: Option<Ipv4Addr>,
+    timezone_offset: Option<i32>,
+    timezone_name: Option<heapless::String<32>>,
+    sync_time: Option<Time>,
+}
+
+impl Info {
+    const fn new() -> Self {
+        Self {
+            ssid: env!("WIFI_SSID"),
+            state: ConnectionState::Disconnected,
+            ip_address: None,
+            timezone_offset: None,
+            timezone_name: None,
+            sync_time: None,
+        }
+    }
+
+    pub fn set_state(&mut self, state: ConnectionState) {
+        self.state = state;
+    }
+
+    pub fn set_ip_address(&mut self, ip: Ipv4Addr) {
+        self.ip_address = Some(ip);
+    }
+
+    pub fn set_timezone(&mut self, offset: i32, name: heapless::String<32>) {
+        self.timezone_offset = Some(offset);
+        self.timezone_name = Some(name);
+    }
+
+    pub fn set_sync_time(&mut self, time: Time) {
+        self.sync_time = Some(time);
+    }
+}
+
+pub static CURRENT_INFO: Mutex<CriticalSectionRawMutex, Info> = Mutex::new(Info::new());
+
+struct DisplayOption<'a, T>(&'a Option<T>);
+
+impl<'a, T: core::fmt::Display> core::fmt::Display for DisplayOption<'a, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.0 {
+            Some(value) => write!(f, "{}", value),
+            None => write!(f, "N/A"),
+        }
+    }
+}
+
 async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
     let mut time_str = heapless::String::<128>::new();
 
@@ -242,8 +259,13 @@ async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
         let info = CURRENT_INFO.lock().await;
         let _ = write!(
             &mut time_str,
-            "SSID: {}\nState: {:?}\nIP: {:?}\nOffset: {}s\nTZ: {}",
-            info.ssid, info.state, info.ip_address, info.timezone_offset, info.timezone_name
+            "SSID: {}\nState: {:?}\nIP: {}\nOffset: {}\nTZ: {}\nSync Time: {}",
+            info.ssid,
+            info.state,
+            DisplayOption(&info.ip_address),
+            DisplayOption(&info.timezone_offset),
+            DisplayOption(&info.timezone_name),
+            DisplayOption(&info.sync_time)
         );
     }
 

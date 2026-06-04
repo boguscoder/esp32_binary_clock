@@ -1,3 +1,5 @@
+use core::fmt;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Time {
     pub hours: u8,
@@ -37,6 +39,16 @@ impl Time {
     pub fn increment_minute(&mut self) {
         self.minutes = (self.minutes + 1) % 60;
         self.seconds = 0; // Reset seconds when setting minutes for precision
+    }
+}
+
+impl fmt::Display for Time {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:02}:{:02}:{:02}",
+            self.hours, self.minutes, self.seconds
+        )
     }
 }
 
