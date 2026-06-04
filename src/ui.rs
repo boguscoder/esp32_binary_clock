@@ -204,7 +204,6 @@ pub struct Info {
     ssid: &'static str,
     state: ConnectionState,
     ip_address: Option<Ipv4Addr>,
-    timezone_offset: Option<i32>,
     timezone_name: Option<heapless::String<32>>,
     sync_time: Option<Time>,
 }
@@ -215,7 +214,6 @@ impl Info {
             ssid: env!("WIFI_SSID"),
             state: ConnectionState::Disconnected,
             ip_address: None,
-            timezone_offset: None,
             timezone_name: None,
             sync_time: None,
         }
@@ -229,8 +227,7 @@ impl Info {
         self.ip_address = Some(ip);
     }
 
-    pub fn set_timezone(&mut self, offset: i32, name: heapless::String<32>) {
-        self.timezone_offset = Some(offset);
+    pub fn set_timezone(&mut self, name: heapless::String<32>) {
         self.timezone_name = Some(name);
     }
 
@@ -259,11 +256,10 @@ async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
         let info = CURRENT_INFO.lock().await;
         let _ = write!(
             &mut time_str,
-            "SSID: {}\nState: {:?}\nIP: {}\nOffset: {}\nTZ: {}\nSync Time: {}",
+            "SSID: {}\nState: {:?}\nIP: {}\nTZ: {}\nSync Time: {}",
             info.ssid,
             info.state,
             DisplayOption(&info.ip_address),
-            DisplayOption(&info.timezone_offset),
             DisplayOption(&info.timezone_name),
             DisplayOption(&info.sync_time)
         );

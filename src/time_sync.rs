@@ -160,7 +160,7 @@ async fn sntp_sync_task(stack: Stack<'static>) {
                 "Fetched timezone offset: {} seconds, tz name: {}",
                 offset, tz_name
             );
-            CURRENT_INFO.lock().await.set_timezone(offset, tz_name);
+            CURRENT_INFO.lock().await.set_timezone(tz_name);
 
             offset
         }
@@ -175,8 +175,7 @@ async fn sntp_sync_task(stack: Stack<'static>) {
 
         match get_time(server_endpoint, &socket_wrapper, ntp_context).await {
             Ok(ntp_result) => {
-                let ntp_seconds = ntp_result.sec() as i64;
-                let new_time = get_current_time_epoch(ntp_seconds, tz_offset);
+                let new_time = get_current_time_epoch(ntp_result.sec() as i64, tz_offset);
                 CURRENT_TIME.signal(new_time);
                 CURRENT_INFO.lock().await.set_sync_time(new_time);
                 Timer::after(TIME_REFRESH_INTERVAL).await;
