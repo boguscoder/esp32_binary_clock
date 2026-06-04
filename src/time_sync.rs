@@ -85,8 +85,8 @@ async fn connection_task(mut controller: WifiController<'static>) {
                 let _ = controller.wait_for_disconnect_async().await;
                 println!("Wi-Fi disconnected! Attempting to reconnect...");
             }
-            Err(e) => {
-                println!("Connection failed. {} Retrying in 5 seconds...", e);
+            Err(_e) => {
+                println!("Connection failed. {} Retrying in 5 seconds...", _e);
                 Timer::after(Duration::from_millis(5000)).await;
                 retries += 1;
                 if retries >= MAX_RETRIES {
