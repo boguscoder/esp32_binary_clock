@@ -1,29 +1,39 @@
-use crate::display::{Display, LandscapeDisplay};
+use crate::display::{Display, LandscapeDisplay, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 use crate::time::{SetMode, Time};
 use crate::time_sync::ConnectionState;
 use core::fmt::Write;
 use core::net::Ipv4Addr;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embedded_graphics::{
-    mono_font::{
-        ascii::{FONT_6X10, FONT_9X15_BOLD},
-        MonoTextStyleBuilder,
-    },
+    mono_font::{ascii::FONT_9X15_BOLD, MonoTextStyleBuilder},
     pixelcolor::Rgb565,
     prelude::*,
-    primitives::{Circle, PrimitiveStyleBuilder, StrokeAlignment},
+    primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
     text::{Alignment, Text},
 };
 
 const BG_COLOR: Rgb565 = Rgb565::BLACK;
 const INACTIVE_COLOR: Rgb565 = Rgb565::new(4, 7, 10); // Dim outline for off bits
-const TEXT_MUTED: Rgb565 = Rgb565::new(12, 24, 36); // Slate gray labels
 const H_INNER: Rgb565 = Rgb565::new(31, 0, 16);
 const H_OUTER: Rgb565 = Rgb565::new(20, 0, 8);
 const M_INNER: Rgb565 = Rgb565::new(0, 60, 30);
 const M_OUTER: Rgb565 = Rgb565::new(0, 30, 15);
 const S_INNER: Rgb565 = Rgb565::new(31, 45, 0);
 const S_OUTER: Rgb565 = Rgb565::new(20, 20, 0);
+
+const GLOW_SIZE: u32 = 4;
+const PADDING: u32 = 2;
+const SECTION_PADDING: u32 = PADDING * 6;
+
+const TOTAL_OFFSET: u32 = GLOW_SIZE + PADDING;
+const FULL_PADDING: u32 = TOTAL_OFFSET * 2;
+
+const DOT_SIZE: u32 = (DISPLAY_HEIGHT as u32 / 4) - FULL_PADDING;
+const ERASURE_DIM: u32 = DOT_SIZE + FULL_PADDING;
+const GLOW_DIM: u32 = DOT_SIZE + (GLOW_SIZE * 2);
+
+const COL_STRIDE: i32 = (DOT_SIZE + FULL_PADDING) as i32;
+const X_SHIFT: i32 = (DISPLAY_WIDTH - (6 * COL_STRIDE)) / 2 - SECTION_PADDING as i32;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum UiType {
@@ -42,10 +52,9 @@ impl UiType {
     }
 }
 
-// Draws a premium glowing dot (orb) on the display
-fn draw_glowing_dot<D>(
+fn draw_glowing_square<D>(
     target: &mut D,
-    center: Point,
+    top_left: Point,
     is_on: bool,
     inner_color: Rgb565,
     outer_color: Rgb565,
@@ -53,79 +62,40 @@ fn draw_glowing_dot<D>(
 where
     D: DrawTarget<Color = Rgb565>,
 {
-    const RADIUS: u32 = 8;
-    const ERASURE_RADIUS: u32 = RADIUS + 4;
+    let glow_top_left = top_left + Point::new(PADDING as i32, PADDING as i32);
+    let core_top_left = top_left + Point::new(TOTAL_OFFSET as i32, TOTAL_OFFSET as i32);
 
     if is_on {
-        // Outer glowing aura
-        Circle::new(
-            center - Point::new((RADIUS + 3) as i32, (RADIUS + 3) as i32),
-            (RADIUS + 3) * 2 + 1,
-        )
-        .into_styled(PrimitiveStyleBuilder::new().fill_color(outer_color).build())
-        .draw(target)?;
+        Rectangle::new(glow_top_left, Size::new(GLOW_DIM, GLOW_DIM))
+            .into_styled(PrimitiveStyleBuilder::new().fill_color(outer_color).build())
+            .draw(target)?;
 
-        // Inner hot core
-        Circle::new(
-            center - Point::new(RADIUS as i32, RADIUS as i32),
-            RADIUS * 2 + 1,
-        )
-        .into_styled(PrimitiveStyleBuilder::new().fill_color(inner_color).build())
-        .draw(target)?;
+        Rectangle::new(core_top_left, Size::new(DOT_SIZE, DOT_SIZE))
+            .into_styled(PrimitiveStyleBuilder::new().fill_color(inner_color).build())
+            .draw(target)?;
     } else {
-        // Erase old glowing aura first with background color
-        Circle::new(
-            center - Point::new(ERASURE_RADIUS as i32, ERASURE_RADIUS as i32),
-            ERASURE_RADIUS * 2 + 1,
-        )
-        .into_styled(PrimitiveStyleBuilder::new().fill_color(BG_COLOR).build())
-        .draw(target)?;
+        Rectangle::new(top_left, Size::new(ERASURE_DIM, ERASURE_DIM))
+            .into_styled(PrimitiveStyleBuilder::new().fill_color(BG_COLOR).build())
+            .draw(target)?;
 
-        // Muted inactive state (a simple dim circle outline)
-        Circle::new(
-            center - Point::new(RADIUS as i32, RADIUS as i32),
-            RADIUS * 2 + 1,
-        )
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-                .stroke_color(INACTIVE_COLOR)
-                .stroke_width(2)
-                .stroke_alignment(StrokeAlignment::Inside)
-                .build(),
-        )
-        .draw(target)?;
+        Rectangle::new(core_top_left, Size::new(DOT_SIZE, DOT_SIZE))
+            .into_styled(
+                PrimitiveStyleBuilder::new()
+                    .stroke_color(INACTIVE_COLOR)
+                    .stroke_width(2)
+                    .stroke_alignment(StrokeAlignment::Inside)
+                    .build(),
+            )
+            .draw(target)?;
     }
 
     Ok(())
 }
 
-fn render_clock(
-    display: &mut LandscapeDisplay,
-    time: &Time,
-    set_mode: SetMode,
-    ui_type: UiType,
-    force_redraw: bool,
-) {
-    if force_redraw {
-        let label_style = MonoTextStyleBuilder::new()
-            .font(&FONT_6X10)
-            .text_color(TEXT_MUTED)
-            .build();
-
-        Text::with_alignment("H", Point::new(67, 125), label_style, Alignment::Center)
-            .draw(display)
-            .unwrap();
-        Text::with_alignment("M", Point::new(162, 125), label_style, Alignment::Center)
-            .draw(display)
-            .unwrap();
-        Text::with_alignment("S", Point::new(257, 125), label_style, Alignment::Center)
-            .draw(display)
-            .unwrap();
-    }
-
+fn render_clock(display: &mut LandscapeDisplay, time: &Time, set_mode: SetMode, ui_type: UiType) {
     // Flash state for configuration mode (toggles every 250ms -> 2Hz flash rate)
     let is_flash_on = (time.milliseconds / 250).is_multiple_of(2);
-
+    let mut shift_section = 0;
     let cols = [
         (time.hours / 10, 2, H_INNER, H_OUTER, SetMode::SetHours),
         (time.hours % 10, 4, H_INNER, H_OUTER, SetMode::SetHours),
@@ -135,14 +105,14 @@ fn render_clock(
         (time.seconds % 10, 4, S_INNER, S_OUTER, SetMode::None),
     ];
 
-    let x_positions = [45, 90, 140, 185, 235, 280];
-    let y_positions = [35, 60, 85, 110];
-    let y_shift = if ui_type == UiType::FullTime { 0 } else { 10 };
-
     for (col_idx, &(val, max_bits, inner_col, outer_col, mode)) in cols.iter().enumerate() {
         let display_column = set_mode != mode || is_flash_on;
 
-        for (row_idx, _) in y_positions.iter().enumerate() {
+        if col_idx != 0 && col_idx.is_multiple_of(2) {
+            shift_section += SECTION_PADDING
+        }
+
+        for row_idx in 0..4 {
             let bit_val = 1 << (3 - row_idx);
             let bit_exists = match max_bits {
                 2 => bit_val <= 2,
@@ -152,8 +122,11 @@ fn render_clock(
 
             if bit_exists {
                 let is_on = ((val & bit_val) != 0) && display_column;
-                let center = Point::new(x_positions[col_idx], y_positions[row_idx] + y_shift);
-                draw_glowing_dot(display, center, is_on, inner_col, outer_col).unwrap();
+                let location = Point::new(
+                    X_SHIFT + (col_idx as i32 * COL_STRIDE) + shift_section as i32,
+                    row_idx * COL_STRIDE,
+                );
+                draw_glowing_square(display, location, is_on, inner_col, outer_col).unwrap();
             }
         }
     }
@@ -295,7 +268,7 @@ pub async fn render_ui(
     }
     match ui_type {
         UiType::BcdTime | UiType::FullTime => {
-            render_clock(&mut display_target, time, set_mode, ui_type, force_redraw)
+            render_clock(&mut display_target, time, set_mode, ui_type)
         }
 
         UiType::Info => render_info(&mut display_target).await,

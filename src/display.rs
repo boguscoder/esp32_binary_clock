@@ -32,6 +32,11 @@ pub struct LandscapeDisplay<'a, 'd> {
     pub base: &'a mut Display<'d>,
 }
 
+pub const DISPLAY_HEIGHT: i32 = 172;
+pub const DISPLAY_WIDTH: i32 = 320;
+const DISPLAY_REAL_HEIGHT: i32 = 240;
+const OFFSET_X: i32 = 34;
+
 impl<'a, 'd> DrawTarget for LandscapeDisplay<'a, 'd> {
     type Color = Rgb565;
     type Error = <Display<'d> as DrawTarget>::Error;
@@ -40,9 +45,6 @@ impl<'a, 'd> DrawTarget for LandscapeDisplay<'a, 'd> {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        const DISPLAY_HEIGHT: i32 = 172;
-        const OFFSET_X: i32 = 34; // Discover hardware offset from custom display
-
         self.base
             .draw_iter(pixels.into_iter().map(|Pixel(Point { x, y }, color)| {
                 // Map logical landscape (x, y) to physical portrait (st_x, st_y)
@@ -55,7 +57,7 @@ impl<'a, 'd> DrawTarget for LandscapeDisplay<'a, 'd> {
 
 impl<'a, 'd> OriginDimensions for LandscapeDisplay<'a, 'd> {
     fn size(&self) -> Size {
-        Size::new(320, 172)
+        Size::new(DISPLAY_WIDTH as u32, DISPLAY_HEIGHT as u32)
     }
 }
 
@@ -114,7 +116,7 @@ pub fn init_display<'d>(config: DisplayConfig<'d>, delay: &mut Delay) -> Display
     let di = SpiInterface::new(spi_device, dc, DISPLAY_BUFFER.init([0; 1024]));
 
     let mut display = Builder::new(ST7789, di)
-        .display_size(240, 320)
+        .display_size(DISPLAY_REAL_HEIGHT as u16, DISPLAY_WIDTH as u16)
         .display_offset(0, 0)
         .invert_colors(ColorInversion::Inverted)
         .reset_pin(rst)
