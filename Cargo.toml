@@ -13,16 +13,19 @@ esp-radio = { version = "0.18.0", features = ["esp32c6", "wifi"] }
 esp-alloc = "0.10.0"
 
 embedded-graphics = "0.8.2"
+embedded-graphics-framebuf = "0.5.0"
 embedded-io = "0.7.1"
 embedded-hal = "1.0.0"
 embedded-hal-bus = "0.3.0"
 
-
-mipidsi = "0.10.0"
 display-interface-spi = "0.5.0"
 heapless = "0.8.0"
-static_cell = "2.1.1"
+mipidsi = "0.10.0"
 reqwless = { version = "0.14", default-features = false }
+sntpc = { version = "0.10.0", default-features = false }
+sntpc-net-embassy = "0.10.0"
+sntpc-time-embassy = "0.5.0"
+static_cell = "2.1.1"
 
 
 embassy-executor = "0.10.0"
@@ -30,13 +33,6 @@ embassy-time = "0.5.1"
 embassy-sync = "0.8.0"
 embassy-net = { version = "0.9.1", features = ["proto-ipv4", "udp", "tcp", "dhcpv4", "dns", "medium-ethernet"] }
 
-
-sntpc = { version = "0.10.0", default-features = false }
-sntpc-net-embassy = "0.10.0"
-sntpc-time-embassy = "0.5.0"
-
-[profile.dev]
-opt-level = "s"
 
 [profile.release]
 opt-level = "s"

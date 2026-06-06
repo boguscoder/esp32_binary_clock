@@ -11,6 +11,7 @@ use embedded_graphics::{
     primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
     text::{Alignment, Text},
 };
+use embedded_graphics_framebuf::FrameBuf;
 
 const BG_COLOR: Rgb565 = Rgb565::BLACK;
 const INACTIVE_COLOR: Rgb565 = Rgb565::new(4, 7, 10); // Dim outline for off bits
@@ -52,15 +53,15 @@ impl UiType {
     }
 }
 
-fn draw_glowing_square<D>(
-    target: &mut D,
+fn draw_glowing_square<T>(
+    target: &mut T,
     top_left: Point,
     is_on: bool,
     inner_color: Rgb565,
     outer_color: Rgb565,
-) -> Result<(), D::Error>
+) -> Result<(), T::Error>
 where
-    D: DrawTarget<Color = Rgb565>,
+    T: DrawTarget<Color = Rgb565>,
 {
     let glow_top_left = top_left + Point::new(PADDING as i32, PADDING as i32);
     let core_top_left = top_left + Point::new(TOTAL_OFFSET as i32, TOTAL_OFFSET as i32);
@@ -92,7 +93,15 @@ where
     Ok(())
 }
 
-fn render_clock(display: &mut LandscapeDisplay, time: &Time, set_mode: SetMode, ui_type: UiType) {
+fn render_clock<T>(
+    display: &mut T,
+    time: &Time,
+    set_mode: SetMode,
+    ui_type: UiType,
+) -> Result<(), T::Error>
+where
+    T: DrawTarget<Color = Rgb565>,
+{
     // Flash state for configuration mode (toggles every 250ms -> 2Hz flash rate)
     let is_flash_on = (time.milliseconds / 250).is_multiple_of(2);
     let mut shift_section = 0;
@@ -126,7 +135,7 @@ fn render_clock(display: &mut LandscapeDisplay, time: &Time, set_mode: SetMode, 
                     X_SHIFT + (col_idx as i32 * COL_STRIDE) + shift_section as i32,
                     row_idx * COL_STRIDE,
                 );
-                draw_glowing_square(display, location, is_on, inner_col, outer_col).unwrap();
+                draw_glowing_square(display, location, is_on, inner_col, outer_col)?
             }
         }
     }
@@ -167,9 +176,9 @@ fn render_clock(display: &mut LandscapeDisplay, time: &Time, set_mode: SetMode, 
             text_style,
             Alignment::Center,
         )
-        .draw(display)
-        .unwrap();
+        .draw(display)?;
     }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -222,7 +231,10 @@ impl<'a, T: core::fmt::Display> core::fmt::Display for DisplayOption<'a, T> {
     }
 }
 
-async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
+async fn render_info<T>(display: &mut T) -> Result<(), T::Error>
+where
+    T: DrawTarget<Color = Rgb565>,
+{
     let mut time_str = heapless::String::<128>::new();
 
     {
@@ -250,8 +262,9 @@ async fn render_info(display: &mut LandscapeDisplay<'_, '_>) {
         text_style,
         Alignment::Left,
     )
-    .draw(display)
-    .unwrap();
+    .draw(display)?;
+
+    Ok(())
 }
 
 pub async fn render_ui(
@@ -261,16 +274,17 @@ pub async fn render_ui(
     ui_type: UiType,
     force_redraw: bool,
 ) {
-    let mut display_target = LandscapeDisplay { base: raw_display };
+    let mut data = [Rgb565::BLACK; DISPLAY_WIDTH as usize * DISPLAY_HEIGHT as usize];
+    let mut fbuf = FrameBuf::new(&mut data, DISPLAY_WIDTH as usize, DISPLAY_HEIGHT as usize);
 
     if force_redraw {
-        display_target.base.clear(BG_COLOR).unwrap();
+        fbuf.clear(BG_COLOR).unwrap();
     }
     match ui_type {
-        UiType::BcdTime | UiType::FullTime => {
-            render_clock(&mut display_target, time, set_mode, ui_type)
-        }
+        UiType::BcdTime | UiType::FullTime => render_clock(&mut fbuf, time, set_mode, ui_type),
+        UiType::Info => render_info(&mut fbuf).await,
+    };
 
-        UiType::Info => render_info(&mut display_target).await,
-    }
+    let mut hardware_display = LandscapeDisplay { base: raw_display };
+    hardware_display.draw_iter(&fbuf).unwrap();
 }

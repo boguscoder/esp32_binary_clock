@@ -35,7 +35,7 @@ pub struct LandscapeDisplay<'a, 'd> {
 pub const DISPLAY_HEIGHT: i32 = 172;
 pub const DISPLAY_WIDTH: i32 = 320;
 const DISPLAY_REAL_HEIGHT: i32 = 240;
-const OFFSET_X: i32 = 34;
+const OFFSET_Y: i32 = 34;
 
 impl<'a, 'd> DrawTarget for LandscapeDisplay<'a, 'd> {
     type Color = Rgb565;
@@ -45,13 +45,11 @@ impl<'a, 'd> DrawTarget for LandscapeDisplay<'a, 'd> {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        self.base
-            .draw_iter(pixels.into_iter().map(|Pixel(Point { x, y }, color)| {
-                // Map logical landscape (x, y) to physical portrait (st_x, st_y)
-                let st_x = (DISPLAY_HEIGHT - 1 - y) + OFFSET_X;
-                let st_y = x;
-                Pixel(Point::new(st_x, st_y), color)
-            }))
+        let shifted = pixels
+            .into_iter()
+            .map(|Pixel(point, color)| Pixel(Point::new(point.x, point.y + OFFSET_Y), color));
+
+        self.base.draw_iter(shifted)
     }
 }
 
@@ -124,7 +122,7 @@ pub fn init_display<'d>(config: DisplayConfig<'d>, delay: &mut Delay) -> Display
         .unwrap();
 
     display
-        .set_orientation(Orientation::new().rotate(Rotation::Deg0))
+        .set_orientation(Orientation::new().rotate(Rotation::Deg90))
         .unwrap();
     display.clear(Rgb565::BLACK).unwrap();
 
