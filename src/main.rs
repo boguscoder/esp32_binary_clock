@@ -75,7 +75,7 @@ async fn main(spawner: Spawner) -> ! {
                 ButtonEvent::LongPress => {
                     set_mode = set_mode.next();
                     if set_mode != SetMode::None {
-                        display_type = UiType::FullTime;
+                        display_type = UiType::RegularTime;
                     }
                 }
                 ButtonEvent::ShortPress => match set_mode {
