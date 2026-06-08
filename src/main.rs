@@ -6,6 +6,8 @@ mod display;
 mod time;
 mod time_sync;
 mod ui;
+mod ui_arc;
+mod ui_bcd;
 
 use crate::button::{button_task, ButtonEvent, BUTTON_EVENTS};
 use crate::display::{init_display, DisplayConfig};
