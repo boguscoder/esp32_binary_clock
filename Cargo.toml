@@ -7,7 +7,7 @@ edition = "2021"
 esp-hal = { version = "1.1.1", features = ["esp32c6", "unstable"] }
 esp-rtos = { version = "0.3.0", features = ["esp32c6", "embassy", "esp-radio"] }
 esp-backtrace = { version = "0.19.0", features = ["esp32c6", "panic-handler", "println"] }
-esp-println = { version = "0.17.0", default-features = false, features = ["esp32c6", "log-04", "no-op"] }
+esp-println = { version = "0.17.0", default-features = false, features = ["esp32c6"] }
 esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32c6"] }
 esp-radio = { version = "0.18.0", features = ["esp32c6", "wifi"] }
 esp-alloc = "0.10.0"
@@ -32,6 +32,10 @@ embassy-executor = "0.10.0"
 embassy-time = "0.5.1"
 embassy-sync = "0.8.0"
 embassy-net = { version = "0.9.1", features = ["proto-ipv4", "udp", "tcp", "dhcpv4", "dns", "medium-ethernet"] }
+
+[features]
+default = ["esp-println/no-op"]
+logging = ["esp-println/log-04", "esp-println/auto"]
 
 
 [profile.release]
