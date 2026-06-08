@@ -11,3 +11,7 @@ target = "riscv32imac-unknown-none-elf"
 MCU = "esp32c6"
 WIFI_SSID = "foo"
 WIFI_PASS = "bar"
+
+[alias]
+log-run = "run --no-default-features --features logging"
+silent-run = "run"
