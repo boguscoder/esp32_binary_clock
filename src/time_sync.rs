@@ -30,6 +30,7 @@ pub enum ConnectionState {
     Disconnected,
     Connecting,
     Connected,
+    Sleeping,
 }
 
 pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
@@ -58,49 +59,8 @@ pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
     );
 
     println!("Spawning background network tasks...");
-    spawner.spawn(connection_task(controller).unwrap());
     spawner.spawn(net_runner_task(runner).unwrap());
-    spawner.spawn(sntp_sync_task(stack).unwrap());
-}
-
-#[embassy_executor::task]
-async fn connection_task(mut controller: WifiController<'static>) {
-    println!("Starting Wi-Fi connection task...");
-    const MAX_RETRIES: usize = 10;
-    let mut retries = 0;
-    loop {
-        {
-            CURRENT_INFO
-                .lock()
-                .await
-                .set_state(ConnectionState::Connecting);
-        }
-        match controller.connect_async().await {
-            Ok(_) => {
-                println!("Wi-Fi Connected successfully!");
-                CURRENT_INFO
-                    .lock()
-                    .await
-                    .set_state(ConnectionState::Connected);
-                let _ = controller.wait_for_disconnect_async().await;
-                println!("Wi-Fi disconnected! Attempting to reconnect...");
-            }
-            Err(_e) => {
-                println!("Connection failed. {} Retrying in 5 seconds...", _e);
-                Timer::after(Duration::from_millis(5000)).await;
-                retries += 1;
-                if retries >= MAX_RETRIES {
-                    println!("Max retries reached. Giving up on Wi-Fi connection.");
-                    break;
-                }
-            }
-        }
-    }
-
-    CURRENT_INFO
-        .lock()
-        .await
-        .set_state(ConnectionState::Disconnected);
+    spawner.spawn(sync_manager_task(controller, stack).unwrap());
 }
 
 #[embassy_executor::task]
@@ -109,82 +69,140 @@ async fn net_runner_task(mut runner: Runner<'static, Interface<'static>>) {
 }
 
 #[embassy_executor::task]
-async fn sntp_sync_task(stack: Stack<'static>) {
-    println!("Waiting for IP address...");
+async fn sync_manager_task(mut controller: WifiController<'static>, stack: Stack<'static>) {
+    let mut tz_offset = 0;
+    let mut tz_fetched = false;
+
     loop {
-        if stack.is_config_up() {
-            if let Some(config) = stack.config_v4() {
-                println!("Assigned IP: {}", config.address);
+        println!("Initiating time sync sequence...");
+
+        let mut connected = false;
+        const MAX_RETRIES: usize = 5;
+        let mut retries = 0;
+
+        while retries < MAX_RETRIES {
+            {
                 CURRENT_INFO
                     .lock()
                     .await
-                    .set_ip_address(config.address.address());
-                break;
+                    .set_state(ConnectionState::Connecting);
+            }
+
+            match controller.connect_async().await {
+                Ok(_) => {
+                    println!("Wi-Fi Connected!");
+                    {
+                        CURRENT_INFO
+                            .lock()
+                            .await
+                            .set_state(ConnectionState::Connected);
+                    }
+                    connected = true;
+                    break;
+                }
+                Err(_e) => {
+                    retries += 1;
+                    println!("Connection failed ({}/{}): {:?}", retries, MAX_RETRIES, _e);
+                    if retries < MAX_RETRIES {
+                        Timer::after(Duration::from_secs(10)).await;
+                    }
+                }
             }
         }
-        Timer::after(Duration::from_millis(500)).await;
-    }
 
-    let mut rx_meta = [PacketMetadata::EMPTY; 16];
-    let mut rx_buffer = [0u8; 1024];
-    let mut tx_meta = [PacketMetadata::EMPTY; 16];
-    let mut tx_buffer = [0u8; 1024];
+        if !connected {
+            println!("Max retries reached. Skipping this sync cycle.");
+            {
+                let mut info = CURRENT_INFO.lock().await;
+                info.set_state(ConnectionState::Disconnected);
+                info.clear_ip_address();
+            }
+        } else {
+            // Wait for IP address
+            loop {
+                if stack.is_config_up() {
+                    if let Some(config) = stack.config_v4() {
+                        println!("Assigned IP: {}", config.address);
+                        CURRENT_INFO
+                            .lock()
+                            .await
+                            .set_ip_address(config.address.address());
+                        break;
+                    }
+                }
+                Timer::after(Duration::from_millis(500)).await;
+            }
 
-    let mut socket = UdpSocket::new(
-        stack,
-        &mut rx_meta,
-        &mut rx_buffer,
-        &mut tx_meta,
-        &mut tx_buffer,
-    );
+            // One-time timezone fetch
+            if !tz_fetched {
+                if let Some((offset, tz_name)) = fetch_timezone_offset(stack).await {
+                    println!("Fetched timezone: {} ({})", tz_name, offset);
+                    CURRENT_INFO.lock().await.set_timezone(tz_name);
+                    tz_offset = offset;
+                    tz_fetched = true;
+                } else {
+                    println!("Failed to fetch timezone, using 0");
+                }
+            }
 
-    socket
-        .bind(IpListenEndpoint {
-            addr: None,
-            port: 12345,
-        })
-        .unwrap();
-
-    let socket_wrapper = UdpSocketWrapper::from(socket);
-    let ntp_context = NtpContext::new(EmbassyTimestampGenerator::default());
-    let dns = DnsSocket::new(stack);
-    let endpoints = dns
-        .query("pool.ntp.org", embassy_net::dns::DnsQueryType::A)
-        .await
-        .unwrap();
-    let server_endpoint = SocketAddr::new(endpoints[0].into(), 123);
-
-    let tz_offset = match fetch_timezone_offset(stack).await {
-        Some((offset, tz_name)) => {
-            println!(
-                "Fetched timezone offset: {} seconds, tz name: {}",
-                offset, tz_name
+            // Perform SNTP Sync
+            let mut rx_meta = [PacketMetadata::EMPTY; 16];
+            let mut rx_buffer = [0u8; 1024];
+            let mut tx_meta = [PacketMetadata::EMPTY; 16];
+            let mut tx_buffer = [0u8; 1024];
+            let mut socket = UdpSocket::new(
+                stack,
+                &mut rx_meta,
+                &mut rx_buffer,
+                &mut tx_meta,
+                &mut tx_buffer,
             );
-            CURRENT_INFO.lock().await.set_timezone(tz_name);
+            socket
+                .bind(IpListenEndpoint {
+                    addr: None,
+                    port: 12345,
+                })
+                .unwrap();
+            let socket_wrapper = UdpSocketWrapper::from(socket);
+            let ntp_context = NtpContext::new(EmbassyTimestampGenerator::default());
+            let dns = DnsSocket::new(stack);
 
-            offset
-        }
-        None => {
-            println!("Failed to fetch timezone offset, defaulting to 0");
-            0
-        }
-    };
-
-    loop {
-        println!("Sending SNTP request to {:?}", server_endpoint);
-
-        match get_time(server_endpoint, &socket_wrapper, ntp_context).await {
-            Ok(ntp_result) => {
-                let new_time = get_current_time_epoch(ntp_result.sec() as i64, tz_offset);
-                CURRENT_TIME.signal(new_time);
-                CURRENT_INFO.lock().await.set_sync_time(new_time);
-                Timer::after(TIME_REFRESH_INTERVAL).await;
+            if let Ok(endpoints) = dns
+                .query("pool.ntp.org", embassy_net::dns::DnsQueryType::A)
+                .await
+            {
+                let server_endpoint = SocketAddr::new(endpoints[0].into(), 123);
+                match get_time(server_endpoint, &socket_wrapper, ntp_context).await {
+                    Ok(ntp_result) => {
+                        let new_time = get_current_time_epoch(ntp_result.sec() as i64, tz_offset);
+                        CURRENT_TIME.signal(new_time);
+                        CURRENT_INFO.lock().await.set_sync_time(new_time);
+                        println!("Time synced successfully: {}", new_time);
+                    }
+                    Err(_e) => println!("SNTP Request failed: {:?}", _e),
+                }
             }
-            Err(_e) => {
-                println!("SNTP Sync Failed, retrying in 10s...");
-                Timer::after(Duration::from_secs(10)).await;
+
+            println!("Sync complete. Disconnecting to save power...");
+            let _ = controller.disconnect_async().await;
+            {
+                let mut info = CURRENT_INFO.lock().await;
+                info.set_state(ConnectionState::Disconnected);
+                info.clear_ip_address();
             }
         }
+
+        println!(
+            "Entering low-power wait for {} seconds...",
+            TIME_REFRESH_INTERVAL.as_secs()
+        );
+        {
+            CURRENT_INFO
+                .lock()
+                .await
+                .set_state(ConnectionState::Sleeping);
+        }
+        Timer::after(TIME_REFRESH_INTERVAL).await;
     }
 }
 

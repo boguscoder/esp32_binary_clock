@@ -60,6 +60,10 @@ impl Info {
         self.ip_address = Some(ip);
     }
 
+    pub fn clear_ip_address(&mut self) {
+        self.ip_address = None;
+    }
+
     pub fn set_timezone(&mut self, name: heapless::String<32>) {
         self.timezone_name = Some(name);
     }
