@@ -13,5 +13,5 @@ WIFI_SSID = "foo"
 WIFI_PASS = "bar"
 
 [alias]
-log-run = "run --no-default-features --features logging"
-silent-run = "run"
+log-run = "run --release --no-default-features --features logging"
+silent-run = "run --release"
