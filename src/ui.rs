@@ -71,6 +71,9 @@ impl Info {
 
 pub static CURRENT_INFO: Mutex<CriticalSectionRawMutex, Info> = Mutex::new(Info::new());
 
+pub static FRAMEBUFFER: Mutex<CriticalSectionRawMutex, [Rgb565; (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize]> =
+    Mutex::new([Rgb565::BLACK; (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize]);
+
 struct DisplayOption<'a, T>(&'a Option<T>);
 
 impl<'a, T: core::fmt::Display> core::fmt::Display for DisplayOption<'a, T> {
@@ -126,8 +129,12 @@ pub async fn render_ui(
     ui_type: UiType,
     clear: bool,
 ) {
-    let mut data = [Rgb565::BLACK; DISPLAY_WIDTH as usize * DISPLAY_HEIGHT as usize];
-    let mut fbuf = FrameBuf::new(&mut data, DISPLAY_WIDTH as usize, DISPLAY_HEIGHT as usize);
+    let mut fb_guard = FRAMEBUFFER.lock().await;
+    let mut fbuf = FrameBuf::new(
+        &mut *fb_guard,
+        DISPLAY_WIDTH as usize,
+        DISPLAY_HEIGHT as usize,
+    );
 
     if clear {
         fbuf.clear(BG_COLOR).unwrap();
