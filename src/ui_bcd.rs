@@ -1,6 +1,8 @@
-use crate::display::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
-use crate::time::Time;
-use crate::ui::{BG_COLOR, INACTIVE_COLOR};
+use crate::{
+    display::{DISPLAY_HEIGHT, DISPLAY_WIDTH},
+    time::Time,
+    ui::{BG_COLOR, INACTIVE_COLOR},
+};
 use embedded_graphics::{
     geometry::Size,
     pixelcolor::Rgb565,

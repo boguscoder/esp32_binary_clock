@@ -1,5 +1,4 @@
-use crate::ui::CURRENT_INFO;
-use crate::Time;
+use crate::{ui::CURRENT_INFO, Time};
 use core::net::SocketAddr;
 use embassy_executor::Spawner;
 use embassy_net::{

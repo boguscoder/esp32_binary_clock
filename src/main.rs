@@ -9,15 +9,18 @@ mod ui;
 mod ui_arc;
 mod ui_bcd;
 
-use crate::button::{button_task, ButtonEvent, BUTTON_EVENTS};
-use crate::display::{init_display, DisplayConfig};
-use crate::time::{SetMode, Time};
-use crate::ui::{render_ui, UiType, CURRENT_INFO};
-
+use crate::{
+    button::{button_task, ButtonEvent, BUTTON_EVENTS},
+    display::{init_display, DisplayConfig},
+    time::{SetMode, Time},
+    ui::{render_ui, UiType, CURRENT_INFO},
+};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
-use esp_hal::{delay::Delay, timer::timg::TimerGroup};
+use esp_hal::{
+    delay::Delay, interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup,
+};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -32,8 +35,7 @@ async fn main(spawner: Spawner) -> ! {
     let peripherals = esp_hal::init(config);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let sw_intr =
-        esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+    let sw_intr = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_intr.software_interrupt0);
 
     time_sync::setup_time_sync(peripherals.WIFI, spawner);

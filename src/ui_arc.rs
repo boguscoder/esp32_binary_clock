@@ -1,8 +1,9 @@
-use crate::display::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
-use crate::time::{SetMode, Time};
-use crate::ui::{BG_COLOR, INACTIVE_COLOR};
-use core::f32::consts::PI;
-use core::fmt::Write;
+use crate::{
+    display::{DISPLAY_HEIGHT, DISPLAY_WIDTH},
+    time::{SetMode, Time},
+    ui::{BG_COLOR, INACTIVE_COLOR},
+};
+use core::{f32::consts::PI, fmt::Write};
 use embedded_graphics::{
     geometry::Size,
     mono_font::{ascii::FONT_10X20, MonoTextStyleBuilder},

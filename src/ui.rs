@@ -1,8 +1,9 @@
-use crate::display::{Display, LandscapeDisplay, DISPLAY_HEIGHT, DISPLAY_WIDTH};
-use crate::time::{SetMode, Time};
-use crate::time_sync::ConnectionState;
-use core::fmt::Write;
-use core::net::Ipv4Addr;
+use crate::{
+    display::{Display, LandscapeDisplay, DISPLAY_HEIGHT, DISPLAY_WIDTH},
+    time::{SetMode, Time},
+    time_sync::ConnectionState,
+};
+use core::{fmt::Write, net::Ipv4Addr};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embedded_graphics::{
     mono_font::{ascii::FONT_10X20, MonoTextStyleBuilder},
@@ -75,8 +76,10 @@ impl Info {
 
 pub static CURRENT_INFO: Mutex<CriticalSectionRawMutex, Info> = Mutex::new(Info::new());
 
-pub static FRAMEBUFFER: Mutex<CriticalSectionRawMutex, [Rgb565; (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize]> =
-    Mutex::new([Rgb565::BLACK; (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize]);
+pub static FRAMEBUFFER: Mutex<
+    CriticalSectionRawMutex,
+    [Rgb565; (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize],
+> = Mutex::new([Rgb565::BLACK; (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize]);
 
 struct DisplayOption<'a, T>(&'a Option<T>);
 
