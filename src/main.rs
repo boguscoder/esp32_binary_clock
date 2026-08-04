@@ -2,7 +2,6 @@
 #![no_main]
 
 mod button;
-mod display;
 mod time;
 mod time_sync;
 mod ui;
@@ -11,9 +10,9 @@ mod ui_bcd;
 
 use crate::{
     button::{button_task, ButtonEvent, BUTTON_EVENTS},
-    display::{init_display, DisplayConfig},
     time::{SetMode, Time},
     ui::{render_ui, UiType, CURRENT_INFO},
+    waveshare_display::{init_display, DisplayConfig},
 };
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
@@ -21,6 +20,7 @@ use esp_backtrace as _;
 use esp_hal::{
     delay::Delay, interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup,
 };
+use waveshare_display;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 

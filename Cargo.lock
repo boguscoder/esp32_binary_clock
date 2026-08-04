@@ -59,7 +59,6 @@ dependencies = [
  "embedded-graphics",
  "embedded-graphics-framebuf",
  "embedded-hal 1.0.0",
- "embedded-hal-bus",
  "embedded-io 0.7.1",
  "esp-alloc",
  "esp-backtrace",
@@ -69,12 +68,12 @@ dependencies = [
  "esp-radio",
  "esp-rtos",
  "heapless 0.8.0",
- "mipidsi",
  "reqwless",
  "sntpc",
  "sntpc-net-embassy",
  "sntpc-time-embassy",
  "static_cell",
+ "waveshare_display",
 ]
 
 [[package]]
@@ -2204,6 +2203,18 @@ name = "void"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
+
+[[package]]
+name = "waveshare_display"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "embedded-hal 1.0.0",
+ "embedded-hal-bus",
+ "esp-hal",
+ "mipidsi",
+ "static_cell",
+]
 
 [[package]]
 name = "winapi-util"

@@ -1,5 +1,4 @@
 use crate::{
-    display::{DISPLAY_HEIGHT, DISPLAY_WIDTH},
     time::Time,
     ui::{BG_COLOR, INACTIVE_COLOR},
 };
@@ -11,6 +10,7 @@ use embedded_graphics::{
         CornerRadii, PrimitiveStyleBuilder, Rectangle, RoundedRectangle, StrokeAlignment,
     },
 };
+use waveshare_display::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 const PADDING: u32 = 2;
 const GLOW_SIZE: u32 = 5;

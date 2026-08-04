@@ -1,5 +1,4 @@
 use crate::{
-    display::{Display, LandscapeDisplay, DISPLAY_HEIGHT, DISPLAY_WIDTH},
     time::{SetMode, Time},
     time_sync::ConnectionState,
 };
@@ -12,6 +11,7 @@ use embedded_graphics::{
     text::{Alignment, Text},
 };
 use embedded_graphics_framebuf::FrameBuf;
+use waveshare_display::{Display, LandscapeDisplay, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 pub const BG_COLOR: Rgb565 = Rgb565::BLACK;
 pub const INACTIVE_COLOR: Rgb565 = Rgb565::new(4, 7, 10);

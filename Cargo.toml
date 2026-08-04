@@ -16,11 +16,10 @@ embedded-graphics = "0.8.2"
 embedded-graphics-framebuf = "0.5.0"
 embedded-io = "0.7.1"
 embedded-hal = "1.0.0"
-embedded-hal-bus = "0.3.0"
 
+waveshare_display = { path = "../waveshare_display" }
 display-interface-spi = "0.5.0"
 heapless = "0.8.0"
-mipidsi = "0.10.0"
 reqwless = { version = "0.14", default-features = false }
 sntpc = { version = "0.10.0", default-features = false }
 sntpc-net-embassy = "0.10.0"

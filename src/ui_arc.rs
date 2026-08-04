@@ -1,5 +1,4 @@
 use crate::{
-    display::{DISPLAY_HEIGHT, DISPLAY_WIDTH},
     time::{SetMode, Time},
     ui::{BG_COLOR, INACTIVE_COLOR},
 };
@@ -12,6 +11,7 @@ use embedded_graphics::{
     primitives::{Arc, Line, PrimitiveStyleBuilder, Rectangle},
     text::{Alignment, Text},
 };
+use waveshare_display::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 fn draw_arc<D>(
     display: &mut D,
