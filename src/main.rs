@@ -12,7 +12,6 @@ use crate::{
     button::{button_task, ButtonEvent, BUTTON_EVENTS},
     time::{SetMode, Time},
     ui::{render_ui, UiType, CURRENT_INFO},
-    waveshare_display::{init_display, DisplayConfig},
 };
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
@@ -20,7 +19,7 @@ use esp_backtrace as _;
 use esp_hal::{
     delay::Delay, interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup,
 };
-use waveshare_display;
+use waveshare_display::{init_display, DisplayConfig};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
