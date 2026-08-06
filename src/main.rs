@@ -17,9 +17,10 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
 use esp_hal::{
-    delay::Delay, interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup,
+    delay::Delay, interrupt::software::SoftwareInterruptControl, ledc::channel::ChannelIFace,
+    timer::timg::TimerGroup,
 };
-use waveshare_display::{init_display, DisplayConfig};
+use waveshare_display::{init_display, setup_backlight, DisplayConfig};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -40,6 +41,9 @@ async fn main(spawner: Spawner) -> ! {
     time_sync::setup_time_sync(peripherals.WIFI, spawner);
     spawner.spawn(button_task(peripherals.GPIO9.into()).unwrap());
 
+    setup_backlight!(peripherals.LEDC, peripherals.GPIO22, backlight_channel);
+    backlight_channel.set_duty(BACKLIGHT_BRIGHTNESS).unwrap();
+
     let mut delay = Delay::new();
     let mut display = init_display(
         DisplayConfig {
@@ -49,9 +53,6 @@ async fn main(spawner: Spawner) -> ! {
             cs: peripherals.GPIO14.into(),
             dc: peripherals.GPIO15.into(),
             rst: peripherals.GPIO21.into(),
-            bl: peripherals.GPIO22.into(),
-            ledc: peripherals.LEDC,
-            backlight_duty: BACKLIGHT_BRIGHTNESS,
         },
         &mut delay,
     );
