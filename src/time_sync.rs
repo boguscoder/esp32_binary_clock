@@ -3,7 +3,7 @@ use core::net::SocketAddr;
 use embassy_executor::Spawner;
 use embassy_net::{
     dns::DnsSocket,
-    tcp::client::{TcpClient, TcpClientState},
+    tcp::client::TcpClientState,
     udp::{PacketMetadata, UdpSocket},
     IpListenEndpoint, Stack,
 };
@@ -12,7 +12,6 @@ use embassy_time::{Duration, Timer};
 use esp_hal::peripherals::WIFI;
 use esp_println::println;
 use esp_radio::wifi::WifiController;
-use reqwless::{client::HttpClient, request::Method};
 use sntpc::{get_time, NtpContext};
 use sntpc_net_embassy::UdpSocketWrapper;
 use sntpc_time_embassy::EmbassyTimestampGenerator;
@@ -165,21 +164,15 @@ async fn fetch_timezone_offset(stack: Stack<'_>) -> Option<(i32, heapless::Strin
     static TCP_CLIENT_STATE: StaticCell<TcpClientState<1, 2048, 2048>> = StaticCell::new();
     let tcp_state = TCP_CLIENT_STATE.init(TcpClientState::new());
 
-    let tcp_client = TcpClient::new(stack, tcp_state);
-    let dns_socket = DnsSocket::new(stack);
     let mut rx_buffer = [0u8; 2048];
-    let mut client = HttpClient::new(&tcp_client, &dns_socket);
+    let body = waveshare_net::http_get(
+        stack,
+        tcp_state,
+        &mut rx_buffer,
+        "http://ip-api.com/line/?fields=offset,timezone",
+    )
+    .await?;
 
-    let mut request = client
-        .request(
-            Method::GET,
-            "http://ip-api.com/line/?fields=offset,timezone",
-        )
-        .await
-        .ok()?;
-
-    let response = request.send(&mut rx_buffer).await.ok()?;
-    let body = response.body().read_to_end().await.ok()?;
     let body_str = str::from_utf8(body).ok()?;
     let mut parts = body_str.lines();
     let mut tz_name = heapless::String::<32>::new();

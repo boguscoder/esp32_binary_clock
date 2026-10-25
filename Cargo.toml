@@ -17,7 +17,6 @@ embedded-graphics-framebuf = "0.5.0"
 embedded-hal = "1.0.0"
 
 heapless = "0.8.0"
-reqwless = { version = "0.14", default-features = false }
 sntpc = { version = "0.10.0", default-features = false }
 sntpc-net-embassy = "0.10.0"
 sntpc-time-embassy = "0.5.0"

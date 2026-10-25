@@ -66,7 +66,6 @@ dependencies = [
  "esp-radio",
  "esp-rtos",
  "heapless 0.8.0",
- "reqwless",
  "sntpc",
  "sntpc-net-embassy",
  "sntpc-time-embassy",
@@ -2211,6 +2210,7 @@ dependencies = [
  "embassy-time",
  "esp-hal",
  "esp-radio",
+ "reqwless",
  "static_cell",
 ]
 
