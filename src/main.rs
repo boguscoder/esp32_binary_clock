@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-mod button;
 mod time;
 mod time_sync;
 mod ui;
@@ -9,7 +8,6 @@ mod ui_arc;
 mod ui_bcd;
 
 use crate::{
-    button::{button_task, ButtonEvent, BUTTON_EVENTS},
     time::{SetMode, Time},
     ui::{render_ui, UiType, CURRENT_INFO},
 };
@@ -17,12 +15,13 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
 use esp_hal::{interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup};
+use waveshare_button::{button_task, ButtonEvent, BUTTON_EVENTS};
 use waveshare_display::{init_display, setup_backlight};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const BACKLIGHT_BRIGHTNESS: u8 = 5;
-pub const TICK_INTERVAL_MS: u64 = 20;
+const TICK_INTERVAL_MS: u64 = 20;
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {

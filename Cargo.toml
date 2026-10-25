@@ -28,7 +28,9 @@ embassy-time = "0.5.1"
 embassy-sync = "0.8.0"
 embassy-net = { version = "0.9.1", features = ["proto-ipv4", "udp", "tcp", "dhcpv4", "dns", "medium-ethernet"] }
 
+waveshare_button = { path = "../waveshare_button" }
 waveshare_display = { path = "../waveshare_display" }
+waveshare_net = { path = "../waveshare_net" }
 
 [features]
 default = ["esp-println/no-op"]

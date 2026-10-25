@@ -71,7 +71,9 @@ dependencies = [
  "sntpc-net-embassy",
  "sntpc-time-embassy",
  "static_cell",
+ "waveshare_button",
  "waveshare_display",
+ "waveshare_net",
 ]
 
 [[package]]
@@ -2179,6 +2181,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
+name = "waveshare_button"
+version = "0.1.0"
+dependencies = [
+ "embassy-executor",
+ "embassy-sync 0.8.0",
+ "embassy-time",
+ "esp-hal",
+]
+
+[[package]]
 name = "waveshare_display"
 version = "0.1.0"
 dependencies = [
@@ -2187,6 +2199,18 @@ dependencies = [
  "embedded-hal-bus",
  "esp-hal",
  "mipidsi",
+ "static_cell",
+]
+
+[[package]]
+name = "waveshare_net"
+version = "0.1.0"
+dependencies = [
+ "embassy-executor",
+ "embassy-net",
+ "embassy-time",
+ "esp-hal",
+ "esp-radio",
  "static_cell",
 ]
 
