@@ -16,11 +16,8 @@ use crate::{
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
-use esp_hal::{
-    delay::Delay, interrupt::software::SoftwareInterruptControl, ledc::channel::ChannelIFace,
-    timer::timg::TimerGroup,
-};
-use waveshare_display::{init_display, setup_backlight, DisplayConfig};
+use esp_hal::{interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup};
+use waveshare_display::{init_display, setup_backlight};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -41,21 +38,14 @@ async fn main(spawner: Spawner) -> ! {
     time_sync::setup_time_sync(peripherals.WIFI, spawner);
     spawner.spawn(button_task(peripherals.GPIO9.into()).unwrap());
 
-    setup_backlight!(peripherals.LEDC, peripherals.GPIO22, backlight_channel);
-    backlight_channel.set_duty(BACKLIGHT_BRIGHTNESS).unwrap();
-
-    let mut delay = Delay::new();
-    let mut display = init_display(
-        DisplayConfig {
-            spi: peripherals.SPI2,
-            mosi: peripherals.GPIO6.into(),
-            sclk: peripherals.GPIO7.into(),
-            cs: peripherals.GPIO14.into(),
-            dc: peripherals.GPIO15.into(),
-            rst: peripherals.GPIO21.into(),
-        },
-        &mut delay,
+    setup_backlight!(
+        peripherals.LEDC,
+        peripherals.GPIO22,
+        backlight_channel,
+        BACKLIGHT_BRIGHTNESS
     );
+
+    let mut display = init_display!(peripherals: peripherals);
 
     let mut time = time_sync::CURRENT_TIME
         .try_take()
