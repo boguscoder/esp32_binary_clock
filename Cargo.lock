@@ -69,7 +69,6 @@ dependencies = [
  "sntpc",
  "sntpc-net-embassy",
  "sntpc-time-embassy",
- "static_cell",
  "waveshare_button",
  "waveshare_display",
  "waveshare_net",

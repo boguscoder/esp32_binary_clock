@@ -15,7 +15,6 @@ use esp_radio::wifi::WifiController;
 use sntpc::{get_time, NtpContext};
 use sntpc_net_embassy::UdpSocketWrapper;
 use sntpc_time_embassy::EmbassyTimestampGenerator;
-use static_cell::StaticCell;
 
 pub static CURRENT_TIME: Signal<CriticalSectionRawMutex, crate::Time> = Signal::new();
 const TIME_REFRESH_INTERVAL: Duration = Duration::from_secs(3600 * 3);
@@ -44,6 +43,7 @@ pub fn setup_time_sync(wifi_peripheral: WIFI<'static>, spawner: Spawner) {
 
 #[embassy_executor::task]
 async fn sync_manager_task(mut controller: WifiController<'static>, stack: Stack<'static>) {
+    let (tcp_state, rx) = waveshare_net::http_buffers();
     let mut tz_offset = 0;
     let mut tz_fetched = false;
 
@@ -86,7 +86,9 @@ async fn sync_manager_task(mut controller: WifiController<'static>, stack: Stack
             if stack.is_config_up() {
                 // One-time timezone fetch
                 if !tz_fetched {
-                    if let Some((offset, tz_name)) = fetch_timezone_offset(stack).await {
+                    if let Some((offset, tz_name)) =
+                        fetch_timezone_offset(stack, tcp_state, rx).await
+                    {
                         println!("Fetched timezone: {} ({})", tz_name, offset);
                         CURRENT_INFO.lock().await.set_timezone(tz_name);
                         tz_offset = offset;
@@ -160,16 +162,17 @@ async fn sync_manager_task(mut controller: WifiController<'static>, stack: Stack
     }
 }
 
-async fn fetch_timezone_offset(stack: Stack<'_>) -> Option<(i32, heapless::String<32>)> {
-    static TCP_CLIENT_STATE: StaticCell<TcpClientState<1, 2048, 2048>> = StaticCell::new();
-    let tcp_state = TCP_CLIENT_STATE.init(TcpClientState::new());
-
-    let mut rx_buffer = [0u8; 2048];
+async fn fetch_timezone_offset(
+    stack: Stack<'_>,
+    tcp_state: &'static TcpClientState<1, 2048, 2048>,
+    rx: &mut [u8],
+) -> Option<(i32, heapless::String<32>)> {
     let body = waveshare_net::http_get(
         stack,
         tcp_state,
-        &mut rx_buffer,
+        rx,
         "http://ip-api.com/line/?fields=offset,timezone",
+        &[],
     )
     .await?;
 
